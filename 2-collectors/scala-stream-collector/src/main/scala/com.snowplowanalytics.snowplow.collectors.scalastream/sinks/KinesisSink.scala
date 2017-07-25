@@ -22,12 +22,9 @@ import scala.concurrent.duration._
 import scala.util.{Success, Failure}
 
 import com.amazonaws.services.kinesis.model._
-import com.amazonaws.auth.{
-  EnvironmentVariableCredentialsProvider,
-  BasicAWSCredentials,
-  InstanceProfileCredentialsProvider
-}
-import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.auth._
+import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
+import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClientBuilder}
 
 import model._
 
@@ -148,26 +145,31 @@ class KinesisSink private (config: CollectorConfig, inputType: InputType.InputTy
    *
    * @return the initialized AmazonKinesisClient
    */
-  private def createKinesisClient(): AmazonKinesisClient = {
+  private def createKinesisClient(): AmazonKinesis = {
     val accessKey = config.awsAccessKey
     val secretKey = config.awsSecretKey
-    val client = if (isDefault(accessKey) && isDefault(secretKey)) {
-      new AmazonKinesisClient(new EnvironmentVariableCredentialsProvider())
+    val provider: AWSCredentialsProvider = if (isDefault(accessKey) && isDefault(secretKey)) {
+      new EnvironmentVariableCredentialsProvider()
     } else if (isDefault(accessKey) || isDefault(secretKey)) {
       throw new RuntimeException("access-key and secret-key must both be set to 'env', or neither")
     } else if (isIam(accessKey) && isIam(secretKey)) {
-      new AmazonKinesisClient(new InstanceProfileCredentialsProvider())
+      InstanceProfileCredentialsProvider.getInstance()
     } else if (isIam(accessKey) || isIam(secretKey)) {
       throw new RuntimeException("access-key and secret-key must both be set to 'iam', or neither of them")
     } else if (isEnv(accessKey) && isEnv(secretKey)) {
-      new AmazonKinesisClient()
+      new EnvironmentVariableCredentialsProvider()
     } else if (isEnv(accessKey) || isEnv(secretKey)) {
       throw new RuntimeException("access-key and secret-key must both be set to 'env', or neither of them")
     } else {
-      new AmazonKinesisClient(new BasicAWSCredentials(accessKey, secretKey))
+      new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey))
     }
 
-    client.setEndpoint(config.streamEndpoint)
+    val client = AmazonKinesisClientBuilder
+      .standard()
+      .withCredentials(provider)
+      .withEndpointConfiguration(new EndpointConfiguration(config.streamEndpoint, config.streamRegion))
+      .build()
+
     client
   }
 
