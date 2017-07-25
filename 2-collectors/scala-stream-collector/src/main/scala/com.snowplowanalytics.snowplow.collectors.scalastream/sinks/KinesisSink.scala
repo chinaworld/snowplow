@@ -13,11 +13,14 @@
 package com.snowplowanalytics.snowplow.collectors.scalastream
 package sinks
 
-// Java
 import java.nio.ByteBuffer
 import java.util.concurrent.ScheduledExecutorService
 
-// Amazon
+import scala.collection.JavaConverters._
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.util.{Success, Failure}
+
 import com.amazonaws.services.kinesis.model._
 import com.amazonaws.auth.{
   EnvironmentVariableCredentialsProvider,
@@ -25,14 +28,6 @@ import com.amazonaws.auth.{
   InstanceProfileCredentialsProvider
 }
 import com.amazonaws.services.kinesis.AmazonKinesisClient
-
-// Concurrent libraries
-import scala.concurrent.Future
-import scala.concurrent.duration._
-
-// Scala
-import scala.util.{Success, Failure}
-import scala.collection.JavaConverters._
 
 import model._
 
@@ -181,7 +176,7 @@ class KinesisSink private (config: CollectorConfig, inputType: InputType.InputTy
     private var byteCount = 0L
     @volatile private var lastFlushedTime = 0L
 
-    def store(event: Array[Byte], key: String) = {
+    def store(event: Array[Byte], key: String): Unit = {
       val eventBytes = ByteBuffer.wrap(event)
       val eventSize = eventBytes.capacity
       if (eventSize >= MaxBytes) {
@@ -197,7 +192,7 @@ class KinesisSink private (config: CollectorConfig, inputType: InputType.InputTy
       }
     }
 
-    def flush() = {
+    def flush(): Unit = {
       val eventsToSend = synchronized {
         val evts = storedEvents.reverse
         storedEvents = Nil
@@ -208,10 +203,10 @@ class KinesisSink private (config: CollectorConfig, inputType: InputType.InputTy
       sendBatch(eventsToSend)
     }
 
-    def getLastFlushTime() = lastFlushedTime
+    def getLastFlushTime(): Long = lastFlushedTime
   }
 
-  def storeRawEvents(events: List[Array[Byte]], key: String) = {
+  def storeRawEvents(events: List[Array[Byte]], key: String): List[Array[Byte]] = {
     events.foreach(e => EventStorage.store(e, key))
     Nil
   }
